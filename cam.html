@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>Türkamera · Closed Circle</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #000;
+    --white: #fff;
+    --dim: rgba(255,255,255,0.55);
+    --faint: rgba(255,255,255,0.14);
+    --live: #ff3b30;
+    --ok: #34c759;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--black); color: var(--white); font-family: 'Montserrat', system-ui, sans-serif; overflow: hidden; }
+
+  /* ── Bild ── */
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--black); }
+  #video { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .6s ease; }
+  #video.fit { object-fit: contain; }
+  #video.on { opacity: 1; }
+
+  /* Ruhezustand: grosser Schriftzug statt leerem Schwarz */
+  #idle {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px;
+    transition: opacity .4s ease;
+  }
+  #idle.hide { opacity: 0; pointer-events: none; }
+  #idle h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: min(22vw, 26vh, 180px); line-height: .85; letter-spacing: 2px; }
+  #idle p { font-size: 13px; color: var(--dim); max-width: 30ch; line-height: 1.6; }
+
+  /* ── Obere Leiste ── */
+  #top {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+    padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px 28px;
+    display: flex; justify-content: space-between; align-items: center;
+    background: linear-gradient(to bottom, rgba(0,0,0,.7), rgba(0,0,0,0));
+    pointer-events: none;
+  }
+  .brand { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 3px; }
+  #status { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--dim); }
+  #status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  #status.live { color: var(--white); }
+  #status.live .dot { background: var(--live); animation: pulse 1.6s ease-in-out infinite; }
+  #status.wait .dot { background: var(--white); animation: pulse .8s ease-in-out infinite; }
+  #status.err { color: var(--live); }
+  #status.err .dot { background: var(--live); }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  #clock {
+    position: fixed; z-index: 5; left: 20px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 110px);
+    font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: 1px;
+    text-shadow: 0 1px 12px rgba(0,0,0,.6); display: none;
+  }
+  #clock.on { display: block; }
+
+  /* ── Untere Leiste ── */
+  #bottom {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    padding: 36px 20px calc(env(safe-area-inset-bottom, 0px) + 20px);
+    display: flex; gap: 10px; justify-content: center;
+    background: linear-gradient(to top, rgba(0,0,0,.75), rgba(0,0,0,0));
+  }
+  button {
+    font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 15px;
+    border: 0; border-radius: 999px; padding: 17px 28px; cursor: pointer;
+    transition: transform .12s ease, background .2s ease;
+  }
+  button:active { transform: scale(.96); }
+  button:focus-visible { outline: 2px solid var(--white); outline-offset: 3px; }
+  #main { background: var(--white); color: var(--black); flex: 1; max-width: 340px; }
+  #main.stop { background: rgba(255,255,255,.14); color: var(--white); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .ghost { background: rgba(255,255,255,.14); color: var(--white); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 17px 20px; }
+  .ghost[hidden] { display: none; }
+
+  /* ── Code-Eingabe ── */
+  #gate {
+    position: fixed; inset: 0; z-index: 20; background: var(--black);
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 24px;
+  }
+  #gate.on { display: flex; }
+  #gate h2 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 44px; letter-spacing: 2px; }
+  #gate p { font-size: 13px; color: var(--dim); text-align: center; max-width: 30ch; line-height: 1.6; }
+  #gate p.err { color: var(--live); }
+  #code {
+    width: 240px; text-align: center; font-family: 'Bebas Neue', sans-serif; font-size: 48px; letter-spacing: 14px;
+    background: transparent; color: var(--white); border: 0; border-bottom: 2px solid var(--faint);
+    padding: 6px 0 6px 14px; outline: none;
+  }
+  #code:focus { border-bottom-color: var(--white); }
+  #gate button { background: var(--white); color: var(--black); min-width: 240px; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="video" autoplay muted playsinline></video>
+  <div id="idle">
+    <h1>Wer ist<br>vorne?</h1>
+    <p id="idle-text">Tippe auf Verbinden, um das Livebild vom iPad am Eingang zu sehen.</p>
+  </div>
+</div>
+
+<div id="top">
+  <div class="brand">Closed Circle</div>
+  <div id="status"><span class="dot"></span><span id="status-text">Getrennt</span></div>
+</div>
+
+<div id="clock"></div>
+
+<div id="bottom">
+  <button id="fit" class="ghost" hidden aria-label="Bildausschnitt wechseln">⤢</button>
+  <button id="main">Verbinden</button>
+  <button id="lock" class="ghost" aria-label="Zugangscode ändern">Code</button>
+</div>
+
+<div id="gate">
+  <h2>Türkamera</h2>
+  <input id="code" type="password" inputmode="numeric" autocomplete="off" maxlength="12" aria-label="Zugangscode">
+  <p id="gate-text">Zugangscode eingeben. Er wird auf diesem Gerät gespeichert.</p>
+  <button id="gate-btn">Weiter</button>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const CAM_ID = 'ccs-tuer-kamera-7f3k9q2x'; // identisch mit studio-display.html
+const ICE = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+];
+const STORE_KEY = 'ccs-cam-code';
+
+const $ = (id) => document.getElementById(id);
+const video = $('video');
+let attempt = 0, peer = null, conn = null, pingTimer = null, timeoutTimer = null, clockTimer = null, active = false;
+
+function getCode() { try { return localStorage.getItem(STORE_KEY) || ''; } catch (e) { return ''; } }
+function setCode(v) { try { v ? localStorage.setItem(STORE_KEY, v) : localStorage.removeItem(STORE_KEY); } catch (e) {} }
+
+function setStatus(kind, text) {
+  $('status').className = kind || '';
+  $('status-text').textContent = text;
+}
+
+function showGate(msg, isErr) {
+  $('gate-text').textContent = msg || 'Zugangscode eingeben. Er wird auf diesem Gerät gespeichert.';
+  $('gate-text').className = isErr ? 'err' : '';
+  $('code').value = '';
+  $('gate').classList.add('on');
+  setTimeout(() => $('code').focus(), 50);
+}
+
+function submitGate() {
+  const v = $('code').value.trim();
+  if (!v) return;
+  setCode(v);
+  $('gate').classList.remove('on');
+  connect();
+}
+
+function tickClock() {
+  const d = new Date();
+  $('clock').textContent = d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function uiLive(on) {
+  video.classList.toggle('on', on);
+  $('idle').classList.toggle('hide', on);
+  $('clock').classList.toggle('on', on);
+  $('fit').hidden = !on;
+  clearInterval(clockTimer);
+  if (on) { tickClock(); clockTimer = setInterval(tickClock, 1000); }
+}
+
+function uiButton() {
+  $('main').textContent = active ? 'Trennen' : 'Verbinden';
+  $('main').classList.toggle('stop', active);
+}
+
+function connect() {
+  const code = getCode();
+  if (!code) { showGate(); return; }
+  if (typeof Peer === 'undefined') { setStatus('err', 'Offline'); $('idle-text').textContent = 'Verbindungsbibliothek konnte nicht geladen werden. Internet prüfen.'; return; }
+
+  disconnect(true);
+  active = true; uiButton();
+  setStatus('wait', 'Verbinde …');
+  $('idle-text').textContent = 'Verbindung zum iPad wird aufgebaut …';
+
+  peer = new Peer({ config: { iceServers: ICE } });
+
+  attempt = 0;
+  peer.on('open', () => retryConnect(code));
+
+
+  peer.on('call', (call) => {
+    call.answer();
+    call.on('stream', (stream) => {
+      clearTimeout(timeoutTimer);
+      video.srcObject = stream;
+      video.play().catch(() => {});
+      uiLive(true);
+      setStatus('live', 'Live');
+    });
+    call.on('close', () => { if (active) fail('Livebild beendet.'); });
+  });
+
+  peer.on('error', (err) => {
+    if (err.type === 'peer-unavailable') {
+      if (attempt < 4) {
+        attempt++;
+        setStatus('wait', 'Suche iPad … (' + attempt + '/4)');
+        setTimeout(() => { if (active && peer && !peer.destroyed) retryConnect(code); }, 3000);
+        return;
+      }
+      fail('iPad nicht erreichbar. Läuft am iPad die neue Version der Display-Seite?');
+    }
+    else fail('Verbindungsfehler (' + err.type + ').');
+  });
+
+  clearTimeout(timeoutTimer);
+  timeoutTimer = setTimeout(() => { if (active && !video.srcObject) fail('Keine Antwort vom iPad. Später nochmals versuchen.'); }, 30000);
+}
+
+function retryConnect(code) {
+  if (conn) { try { conn.close(); } catch (e) {} }
+  clearInterval(pingTimer);
+  conn = peer.connect(CAM_ID, { metadata: { code }, reliable: true });
+  conn.on('open', () => {
+    setStatus('wait', 'Verbunden, warte auf Bild …');
+    pingTimer = setInterval(() => { try { conn.send({ type: 'ping' }); } catch (e) {} }, 4000);
+  });
+  conn.on('data', (msg) => {
+    if (!msg) return;
+    if (msg.type === 'denied') { disconnect(); setCode(''); showGate('Falscher Code.', true); }
+    if (msg.type === 'error') { fail(msg.message || 'Kamera am iPad nicht verfügbar.'); }
+  });
+  conn.on('close', () => { if (active && video.srcObject) fail('Verbindung zum iPad beendet.'); });
+}
+
+function fail(text) {
+  disconnect();
+  setStatus('err', 'Fehler');
+  $('idle-text').textContent = text;
+}
+
+function disconnect(silent) {
+  clearInterval(pingTimer); clearTimeout(timeoutTimer);
+  if (conn) { try { conn.send({ type: 'bye' }); } catch (e) {} try { conn.close(); } catch (e) {} }
+  if (peer) { try { peer.destroy(); } catch (e) {} }
+  conn = null; peer = null;
+  if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  active = false; uiButton(); uiLive(false);
+  if (!silent) { setStatus('', 'Getrennt'); $('idle-text').textContent = 'Tippe auf Verbinden, um das Livebild vom iPad am Eingang zu sehen.'; }
+}
+
+$('main').addEventListener('click', () => active ? disconnect() : connect());
+$('lock').addEventListener('click', () => { disconnect(); setCode(''); showGate(); });
+$('fit').addEventListener('click', () => video.classList.toggle('fit'));
+$('gate-btn').addEventListener('click', submitGate);
+$('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
+
+// Kamera am iPad nicht unnötig laufen lassen, wenn die Seite hier weg ist
+document.addEventListener('visibilitychange', () => { if (document.hidden && active) disconnect(); });
+window.addEventListener('pagehide', () => { if (active) disconnect(true); });
+
+if (!getCode()) showGate(); else connect();
+</script>
+</body>
+</html>
