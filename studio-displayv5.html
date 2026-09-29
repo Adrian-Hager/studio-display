@@ -500,7 +500,8 @@ const CAM_CONFIG = {
   idleTimeout: 15000,                  // Kamera aus, wenn Viewer so lange kein Signal sendet
 };
 
-const camState = { peer: null, stream: null, viewers: new Map(), retryTimer: null };
+const camState = { peer: null, stream: null, viewers: new Map(), retryTimer: null, slot: 0 };
+const CAM_SLOTS = 5; // Ausweich-IDs, falls eine alte Sitzung die ID noch blockiert
 
 async function camSha256(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -576,7 +577,8 @@ function camInitPeer() {
   camState.peer = null;
   if (old && !old.destroyed) old.destroy();
   [...camState.viewers.keys()].forEach(camDropViewer);
-  const peer = new Peer(CAM_CONFIG.peerId, {
+  const id = CAM_CONFIG.peerId + (camState.slot ? '-' + camState.slot : '');
+  const peer = new Peer(id, {
     config: { iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -585,6 +587,7 @@ function camInitPeer() {
   });
   camState.peer = peer;
   peer.on('connection', camHandleConnection);
+  peer.on('open', () => { camState.lastError = ''; });
   const current = () => camState.peer === peer;
   peer.on('disconnected', () => {
     if (!current() || peer.destroyed) return;
@@ -593,7 +596,9 @@ function camInitPeer() {
   peer.on('error', (err) => {
     console.log('Kamera-Peer Fehler:', err.type);
     camState.lastError = err.type;
-    if (current() && ['unavailable-id', 'network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) camScheduleRetry(8000);
+    if (!current()) return;
+    if (err.type === 'unavailable-id') { camState.slot = (camState.slot + 1) % CAM_SLOTS; camScheduleRetry(1500); return; }
+    if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) camScheduleRetry(8000);
   });
   peer.on('close', () => { if (current()) camScheduleRetry(8000); });
 }
@@ -618,7 +623,7 @@ if (camDebug) {
   setInterval(() => {
     const p = camState.peer;
     let st = !p ? 'kein Peer' : p.destroyed ? 'zerstört' : p.disconnected ? 'getrennt' : p.open ? 'BEREIT ✓' : 'verbinde …';
-    box.innerHTML = 'Kamera-Version 2<br>Peer: ' + st + '<br>Viewer: ' + camState.viewers.size +
+    box.innerHTML = 'Kamera-Version 3<br>Peer: ' + st + ' (Slot ' + camState.slot + ')' + '<br>Viewer: ' + camState.viewers.size +
       '<br>Kamera: ' + (camState.stream ? 'an' : 'aus') + (camState.lastError ? '<br>Fehler: ' + camState.lastError : '');
   }, 1000);
 }

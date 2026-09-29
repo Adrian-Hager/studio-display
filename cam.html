@@ -133,7 +133,8 @@
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
-const CAM_ID = 'ccs-tuer-kamera-7f3k9q2x'; // identisch mit studio-display.html
+const CAM_ID = 'ccs-tuer-kamera-7f3k9q2x'; // identisch mit studio-display
+const CAM_SLOTS = 5;
 const ICE = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -143,15 +144,13 @@ const STORE_KEY = 'ccs-cam-code';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
-let attempt = 0, peer = null, conn = null, pingTimer = null, timeoutTimer = null, clockTimer = null, active = false;
+let peer = null, conns = [], winner = null, pingTimer = null, timeoutTimer = null, clockTimer = null;
+let active = false, attempt = 0, unavailable = 0, gotStream = false;
 
 function getCode() { try { return localStorage.getItem(STORE_KEY) || ''; } catch (e) { return ''; } }
 function setCode(v) { try { v ? localStorage.setItem(STORE_KEY, v) : localStorage.removeItem(STORE_KEY); } catch (e) {} }
 
-function setStatus(kind, text) {
-  $('status').className = kind || '';
-  $('status-text').textContent = text;
-}
+function setStatus(kind, text) { $('status').className = kind || ''; $('status-text').textContent = text; }
 
 function showGate(msg, isErr) {
   $('gate-text').textContent = msg || 'Zugangscode eingeben. Er wird auf diesem Gerät gespeichert.';
@@ -170,8 +169,7 @@ function submitGate() {
 }
 
 function tickClock() {
-  const d = new Date();
-  $('clock').textContent = d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  $('clock').textContent = new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function uiLive(on) {
@@ -188,78 +186,98 @@ function uiButton() {
   $('main').classList.toggle('stop', active);
 }
 
+function slotId(i) { return CAM_ID + (i ? '-' + i : ''); }
+
+// Alle möglichen iPad-IDs gleichzeitig anfragen – wer antwortet, gewinnt
+function probeAll(code) {
+  conns.forEach(c => { try { c.close(); } catch (e) {} });
+  conns = []; unavailable = 0;
+  for (let i = 0; i < CAM_SLOTS; i++) {
+    const c = peer.connect(slotId(i), { metadata: { code }, reliable: true });
+    conns.push(c);
+    c.on('data', (msg) => {
+      if (!msg || !active) return;
+      if (msg.type === 'ok' && !winner) {
+        winner = c;
+        conns.forEach(o => { if (o !== c) { try { o.close(); } catch (e) {} } });
+        setStatus('wait', 'Verbunden, warte auf Bild …');
+      }
+      if (msg.type === 'denied') { disconnect(); setCode(''); showGate('Falscher Code.', true); }
+      if (msg.type === 'error') fail(msg.message || 'Kamera am iPad nicht verfügbar.');
+    });
+    c.on('close', () => { if (active && c === winner) fail('Verbindung zum iPad beendet.'); });
+  }
+}
+
 function connect() {
   const code = getCode();
   if (!code) { showGate(); return; }
   if (typeof Peer === 'undefined') { setStatus('err', 'Offline'); $('idle-text').textContent = 'Verbindungsbibliothek konnte nicht geladen werden. Internet prüfen.'; return; }
 
   disconnect(true);
-  active = true; uiButton();
+  active = true; attempt = 0; winner = null; gotStream = false; uiButton();
   setStatus('wait', 'Verbinde …');
   $('idle-text').textContent = 'Verbindung zum iPad wird aufgebaut …';
 
   peer = new Peer({ config: { iceServers: ICE } });
-
-  attempt = 0;
-  peer.on('open', () => retryConnect(code));
-
+  peer.on('open', () => {
+    probeAll(code);
+    pingTimer = setInterval(() => {
+      const targets = winner ? [winner] : conns;
+      targets.forEach(c => { if (c.open) { try { c.send({ type: 'ping' }); } catch (e) {} } });
+    }, 4000);
+  });
 
   peer.on('call', (call) => {
+    if (gotStream) { try { call.close(); } catch (e) {} return; }
     call.answer();
     call.on('stream', (stream) => {
+      if (gotStream) return;
+      gotStream = true;
       clearTimeout(timeoutTimer);
       video.srcObject = stream;
       video.play().catch(() => {});
       uiLive(true);
       setStatus('live', 'Live');
     });
-    call.on('close', () => { if (active) fail('Livebild beendet.'); });
+    call.on('close', () => { if (active && gotStream) fail('Livebild beendet.'); });
   });
 
   peer.on('error', (err) => {
     if (err.type === 'peer-unavailable') {
+      unavailable++;
+      if (unavailable < CAM_SLOTS || winner) return;
       if (attempt < 4) {
         attempt++;
         setStatus('wait', 'Suche iPad … (' + attempt + '/4)');
-        setTimeout(() => { if (active && peer && !peer.destroyed) retryConnect(code); }, 3000);
+        setTimeout(() => { if (active && peer && !peer.destroyed && !winner) probeAll(getCode()); }, 3000);
         return;
       }
-      fail('iPad nicht erreichbar. Läuft am iPad die neue Version der Display-Seite?');
+      fail('iPad nicht erreichbar. Ist die Display-Seite am iPad offen und im Vordergrund?');
+      return;
     }
-    else fail('Verbindungsfehler (' + err.type + ').');
+    fail('Verbindungsfehler (' + err.type + ').');
   });
 
   clearTimeout(timeoutTimer);
-  timeoutTimer = setTimeout(() => { if (active && !video.srcObject) fail('Keine Antwort vom iPad. Später nochmals versuchen.'); }, 30000);
-}
-
-function retryConnect(code) {
-  if (conn) { try { conn.close(); } catch (e) {} }
-  clearInterval(pingTimer);
-  conn = peer.connect(CAM_ID, { metadata: { code }, reliable: true });
-  conn.on('open', () => {
-    setStatus('wait', 'Verbunden, warte auf Bild …');
-    pingTimer = setInterval(() => { try { conn.send({ type: 'ping' }); } catch (e) {} }, 4000);
-  });
-  conn.on('data', (msg) => {
-    if (!msg) return;
-    if (msg.type === 'denied') { disconnect(); setCode(''); showGate('Falscher Code.', true); }
-    if (msg.type === 'error') { fail(msg.message || 'Kamera am iPad nicht verfügbar.'); }
-  });
-  conn.on('close', () => { if (active && video.srcObject) fail('Verbindung zum iPad beendet.'); });
+  timeoutTimer = setTimeout(() => {
+    if (!active || gotStream) return;
+    fail(winner ? 'iPad gefunden, aber das Bild kommt nicht durch. Handy ins Studio-WLAN nehmen und nochmals versuchen.'
+                : 'Keine Antwort vom iPad. Später nochmals versuchen.');
+  }, 30000);
 }
 
 function fail(text) {
-  disconnect();
+  disconnect(true);
   setStatus('err', 'Fehler');
   $('idle-text').textContent = text;
 }
 
 function disconnect(silent) {
   clearInterval(pingTimer); clearTimeout(timeoutTimer);
-  if (conn) { try { conn.send({ type: 'bye' }); } catch (e) {} try { conn.close(); } catch (e) {} }
+  conns.forEach(c => { try { if (c.open) c.send({ type: 'bye' }); } catch (e) {} try { c.close(); } catch (e) {} });
   if (peer) { try { peer.destroy(); } catch (e) {} }
-  conn = null; peer = null;
+  conns = []; winner = null; peer = null; gotStream = false;
   if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
   active = false; uiButton(); uiLive(false);
   if (!silent) { setStatus('', 'Getrennt'); $('idle-text').textContent = 'Tippe auf Verbinden, um das Livebild vom iPad am Eingang zu sehen.'; }
@@ -271,7 +289,6 @@ $('fit').addEventListener('click', () => video.classList.toggle('fit'));
 $('gate-btn').addEventListener('click', submitGate);
 $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
 
-// Kamera am iPad nicht unnötig laufen lassen, wenn die Seite hier weg ist
 document.addEventListener('visibilitychange', () => { if (document.hidden && active) disconnect(); });
 window.addEventListener('pagehide', () => { if (active) disconnect(true); });
 
