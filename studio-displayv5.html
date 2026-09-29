@@ -411,6 +411,92 @@
   }
   @keyframes camPulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
   #cam-video { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+  /* ── FINGERABDRUCK-TASTE ── */
+  .pin-key.finger { display: flex; align-items: center; justify-content: center; }
+  .pin-key.finger svg { width: 34px; height: 34px; stroke: currentColor; opacity: .85; }
+  .pin-key.finger.hidden { visibility: hidden; pointer-events: none; }
+  .pin-key.finger.setup svg { opacity: .35; }
+  .pin-key.finger.armed { animation: fingerPulse 1.2s ease-in-out infinite; }
+  @keyframes fingerPulse { 50% { opacity: .35; } }
+
+  /* ══ FINGERPRINT SCAN ══ */
+  #scan {
+    position: fixed; inset: 0; z-index: 2000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #000 radial-gradient(ellipse at 50% 45%, rgba(255,255,255,0.07) 0%, rgba(0,0,0,0) 62%);
+    opacity: 0; pointer-events: none; transition: opacity .35s ease;
+    --c: 255,255,255;
+  }
+  #scan.on { opacity: 1; pointer-events: auto; }
+  #scan.fail { --c: 255,68,68; }
+  #scan.ok { --c: 68,255,136; }
+
+  .scan-rig { position: relative; width: min(46vh, 60vw); aspect-ratio: 200 / 240; }
+  .scan-rig svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+
+  .fp-base path { stroke: rgba(var(--c), .13); stroke-width: 2.1; fill: none; stroke-linecap: round; transition: stroke .4s; }
+  .fp-lit path  { stroke: rgb(var(--c)); stroke-width: 2.1; fill: none; stroke-linecap: round;
+                  filter: drop-shadow(0 0 3px rgba(var(--c), .9)); transition: stroke .4s; }
+
+  /* HUD-Ecken */
+  .scan-corner { position: absolute; width: 16%; aspect-ratio: 1; border: 2px solid rgba(var(--c), .7); transition: all .5s cubic-bezier(.2,.9,.2,1); }
+  .scan-corner.tl { top: -6%; left: -10%; border-right: 0; border-bottom: 0; }
+  .scan-corner.tr { top: -6%; right: -10%; border-left: 0; border-bottom: 0; }
+  .scan-corner.bl { bottom: -6%; left: -10%; border-right: 0; border-top: 0; }
+  .scan-corner.br { bottom: -6%; right: -10%; border-left: 0; border-top: 0; }
+  #scan.ok .scan-corner.tl { top: -2%; left: -4%; }  #scan.ok .scan-corner.tr { top: -2%; right: -4%; }
+  #scan.ok .scan-corner.bl { bottom: -2%; left: -4%; } #scan.ok .scan-corner.br { bottom: -2%; right: -4%; }
+
+  /* Scanlinie */
+  .scan-beam {
+    position: absolute; left: -14%; right: -14%; height: 3px; top: 0;
+    background: linear-gradient(90deg, transparent, rgba(var(--c),.95) 20%, #fff 50%, rgba(var(--c),.95) 80%, transparent);
+    box-shadow: 0 0 18px 4px rgba(var(--c), .55), 0 0 60px 12px rgba(var(--c), .18);
+    border-radius: 3px; will-change: transform;
+  }
+  .scan-beam::after {
+    content: ''; position: absolute; left: 10%; right: 10%; top: 3px; height: 60px;
+    background: linear-gradient(to bottom, rgba(var(--c), .16), transparent);
+  }
+  #scan.ok .scan-beam, #scan.fail .scan-beam { opacity: 0; transition: opacity .3s; }
+
+  /* Rotierende Ringe */
+  .scan-ring { position: absolute; left: 50%; top: 46%; border-radius: 50%; transform: translate(-50%,-50%); pointer-events: none; }
+  .scan-ring.r1 { width: 142%; aspect-ratio: 1; border: 1px dashed rgba(var(--c), .22); animation: spin 18s linear infinite; }
+  .scan-ring.r2 { width: 128%; aspect-ratio: 1; border: 2px solid transparent; border-top-color: rgba(var(--c), .7); border-right-color: rgba(var(--c), .15); animation: spin 2.4s linear infinite; }
+  .scan-ring.burst { width: 60%; aspect-ratio: 1; border: 2px solid rgba(var(--c), .9); opacity: 0; }
+  #scan.ok .scan-ring.burst { animation: burst 1s cubic-bezier(.1,.8,.2,1) forwards; }
+  #scan.ok .scan-ring.burst.b2 { animation-delay: .15s; }
+  @keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+  @keyframes burst { 0% { opacity: .9; width: 60%; } 100% { opacity: 0; width: 260%; border-width: 1px; } }
+
+  .scan-text { margin-top: 7vh; text-align: center; min-height: 90px; }
+  .scan-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(34px, 6vh, 64px); letter-spacing: 8px; color: rgb(var(--c)); text-shadow: 0 0 24px rgba(var(--c), .5); transition: color .4s; }
+  .scan-sub { margin-top: 8px; font-size: 12px; letter-spacing: 4px; color: rgba(255,255,255,.5); font-weight: 600; }
+  .scan-pct { font-variant-numeric: tabular-nums; }
+
+  #scan.fail .scan-rig { animation: glitch .5s steps(2) 1; }
+  @keyframes glitch {
+    0% { transform: translate(0,0); } 20% { transform: translate(-8px,2px); filter: hue-rotate(20deg); }
+    40% { transform: translate(7px,-3px); } 60% { transform: translate(-5px,1px); } 80% { transform: translate(4px,0); } 100% { transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .scan-ring.r1, .scan-ring.r2 { animation: none; } }
+
+  /* ── FINGERABDRUCK-BUTTON UNTEN LINKS (dezent) ── */
+  #finger-btn {
+    position: fixed; z-index: 30;
+    left: calc(env(safe-area-inset-left, 0px) + 58px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 44px);
+    width: 44px; height: 44px;              /* Tippfläche */
+    display: none; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.22);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: color .2s ease;
+  }
+  #finger-btn.show { display: flex; }
+  #finger-btn svg { width: 20px; height: 20px; stroke: currentColor; }
+  #finger-btn:active { color: rgba(255,255,255,0.7); }
 </style>
 </head>
 <body>
@@ -471,7 +557,9 @@
       <div class="pin-key" onclick="pinKey('7')">7</div>
       <div class="pin-key" onclick="pinKey('8')">8</div>
       <div class="pin-key" onclick="pinKey('9')">9</div>
-      <div class="pin-key empty"></div>
+      <div class="pin-key finger hidden" id="finger-key" onclick="fingerTap()" aria-label="Fingerabdruck">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33"/></svg>
+      </div>
       <div class="pin-key" onclick="pinKey('0')">0</div>
       <div class="pin-key delete" onclick="pinDelete()">⌫</div>
     </div>
@@ -482,6 +570,33 @@
 
 <!-- Studio watermark (immer sichtbar) -->
 <div class="studio-watermark">CLOSED CIRCLE STUDIOS</div>
+
+<!-- Fingerabdruck-Button -->
+<div id="finger-btn" role="button" aria-label="Mit Fingerabdruck öffnen" onclick="fingerButtonTap()">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33"/></svg>
+</div>
+
+<!-- Fingerprint-Scan -->
+<div id="scan" aria-live="polite">
+  <div class="scan-rig">
+    <div class="scan-ring r1"></div>
+    <div class="scan-ring r2"></div>
+    <div class="scan-ring burst"></div>
+    <div class="scan-ring burst b2"></div>
+    <svg viewBox="0 0 200 240" id="fp-svg">
+      <defs><clipPath id="fp-clip"><rect id="fp-clip-rect" x="-20" y="0" width="240" height="0"/></clipPath></defs>
+      <g class="fp-base" id="fp-base"></g>
+      <g class="fp-lit" id="fp-lit" clip-path="url(#fp-clip)"></g>
+    </svg>
+    <div class="scan-beam" id="scan-beam"></div>
+    <div class="scan-corner tl"></div><div class="scan-corner tr"></div>
+    <div class="scan-corner bl"></div><div class="scan-corner br"></div>
+  </div>
+  <div class="scan-text">
+    <div class="scan-title" id="scan-title">Finger auflegen</div>
+    <div class="scan-sub" id="scan-sub">Touch ID</div>
+  </div>
+</div>
 
 <!-- Kamera: Live-Hinweis für Besucher -->
 <div id="cam-live"><span class="rec"></span>KAMERA AKTIV</div>
@@ -497,7 +612,8 @@ const CAM_CONFIG = {
   // SHA-256 des Zugangscodes (Code selbst steht NICHT in dieser Datei)
   codeHash: '3ad880fd8a38e064ed3662f0d9f4d0a2b96aef76cc9a4dbe548d6561d64f7c27',
   facingMode: 'user',                  // 'user' = Frontkamera, 'environment' = Rückkamera
-  idleTimeout: 15000,                  // Kamera aus, wenn Viewer so lange kein Signal sendet
+  idleTimeout: 15000,                  // Viewer trennen, wenn er so lange kein Signal sendet
+  keepAlive: true,                     // Kamera nach dem Start offen halten -> Safari fragt nur 1x pro Seitenaufruf
 };
 
 const camState = { peer: null, stream: null, viewers: new Map(), retryTimer: null, slot: 0 };
@@ -511,15 +627,19 @@ async function camSha256(text) {
 async function camStartStream() {
   if (camState.stream && camState.stream.getVideoTracks().some(t => t.readyState === 'live')) return camState.stream;
   camState.stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: CAM_CONFIG.facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: { facingMode: CAM_CONFIG.facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } },
     audio: false,
   });
   document.getElementById('cam-video').srcObject = camState.stream;
-  document.getElementById('cam-live').classList.add('on');
   return camState.stream;
 }
 
+function camUpdateLive() {
+  document.getElementById('cam-live').classList.toggle('on', camState.viewers.size > 0 && !!camState.stream);
+}
+
 function camStopStream() {
+  if (CAM_CONFIG.keepAlive) { camUpdateLive(); return; }
   if (camState.stream) camState.stream.getTracks().forEach(t => t.stop());
   camState.stream = null;
   document.getElementById('cam-video').srcObject = null;
@@ -533,7 +653,7 @@ function camDropViewer(id) {
   try { v.call && v.call.close(); } catch (e) {}
   try { v.conn.close(); } catch (e) {}
   camState.viewers.delete(id);
-  if (camState.viewers.size === 0) camStopStream();
+  if (camState.viewers.size === 0) camStopStream(); else camUpdateLive();
 }
 
 function camHandleConnection(conn) {
@@ -553,6 +673,7 @@ function camHandleConnection(conn) {
     try {
       const stream = await camStartStream();
       viewer.call = camState.peer.call(conn.peer, stream);
+      camUpdateLive();
       viewer.call.on('close', () => camDropViewer(conn.peer));
       conn.send({ type: 'ok' });
     } catch (e) {
@@ -623,12 +744,19 @@ if (camDebug) {
   setInterval(() => {
     const p = camState.peer;
     let st = !p ? 'kein Peer' : p.destroyed ? 'zerstört' : p.disconnected ? 'getrennt' : p.open ? 'BEREIT ✓' : 'verbinde …';
-    box.innerHTML = 'Kamera-Version 3<br>Peer: ' + st + ' (Slot ' + camState.slot + ')' + '<br>Viewer: ' + camState.viewers.size +
+    box.innerHTML = 'Kamera-Version 4<br>Peer: ' + st + ' (Slot ' + camState.slot + ')' + '<br>Viewer: ' + camState.viewers.size +
       '<br>Kamera: ' + (camState.stream ? 'an' : 'aus') + (camState.lastError ? '<br>Fehler: ' + camState.lastError : '');
   }, 1000);
 }
 
 camInitPeer();
+if (CAM_CONFIG.keepAlive) {
+  camStartStream().catch(e => { camState.lastError = 'Kamera: ' + (e.name || e.message); });
+  // Falls iOS die Kamera im Hintergrund abgestellt hat: beim Zurückkommen neu holen
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) camStartStream().catch(() => {});
+  });
+}
 </script>
 
 <script>
@@ -810,6 +938,11 @@ function openPinOverlay() {
   document.getElementById('pin-status').textContent = '';
   document.getElementById('pin-status').className = 'pin-status';
   document.getElementById('pin-overlay').classList.add('active');
+  fingerSetupMode = false; fingerSetupReady = false; fingerResetPending = false;
+  fingerUpdateKey();
+  // Direkt im Tipp-Ereignis starten, sonst blockiert iOS die Abfrage
+  if (fingerCredId()) fingerAuthenticate();
+  refreshDoorStateFromNuki();
 }
 
 function closePinOverlay() {
@@ -843,18 +976,40 @@ function updatePinDots() {
   }
 }
 
+async function doorAuthorized() {
+  document.getElementById('pin-overlay').classList.add('active'); // Status sichtbar machen
+  setDotsState('success');
+  document.getElementById('pin-status').className = 'pin-status success';
+  pinLocked = true;
+  await openNukiDoor();
+  setTimeout(() => {
+    closePinOverlay();
+    pinLocked = false;
+  }, 2500);
+}
+
 async function checkPin() {
   if (pinInput === PIN_CONFIG.pin) {
     // Richtig!
-    setDotsState('success');
-    document.getElementById('pin-status').textContent = 'Öffne Türe...';
-    document.getElementById('pin-status').className = 'pin-status success';
-    pinLocked = true;
-    await openNukiDoor();
-    setTimeout(() => {
-      closePinOverlay();
-      pinLocked = false;
-    }, 2500);
+    if (fingerResetPending) {
+      fingerResetPending = false; fingerSetupMode = false;
+      try { localStorage.removeItem(FINGER_STORE); } catch (e) {}
+      fingerUpdateKey();
+      setDotsState('success');
+      setFingerStatus('Fingerabdruck gelöscht', 'success');
+      setTimeout(() => { if (!pinLocked) closePinOverlay(); }, 1500);
+      return;
+    }
+    if (fingerSetupMode) {
+      // PIN bestätigt -> Fingerabdruck darf eingerichtet werden (Tippen = Nutzergeste für iOS)
+      fingerSetupMode = false;
+      fingerSetupReady = true;
+      setDotsState('success');
+      setFingerStatus('Jetzt auf 👆 tippen und Finger auflegen', 'success');
+      document.getElementById('finger-key').classList.add('armed');
+      return;
+    }
+    await doorAuthorized();
   } else {
     // Falsch
     setDotsState('error');
@@ -876,15 +1031,46 @@ function setDotsState(state) {
   }
 }
 
+// Echten Schlosszustand bei Nuki abfragen (erkennt auch Öffnen/Schliessen von Hand)
+// Nuki-States: 1 verriegelt, 2 entriegelt gerade, 3 entriegelt, 4 verriegelt gerade,
+//              5 Falle gezogen, 6 Lock'n'Go, 7 Falle wird gezogen
+let nukiLastCheck = 0;
+async function refreshDoorStateFromNuki() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(`https://api.nuki.io/smartlock/${PIN_CONFIG.nukiLockId}`, {
+      headers: { 'Authorization': 'Bearer ' + PIN_CONFIG.nukiToken, 'Accept': 'application/json' },
+      signal: ctrl.signal,
+      cache: 'no-store',
+    });
+    clearTimeout(t);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const st = data && data.state ? data.state.state : undefined;
+    if (typeof st !== 'number') throw new Error('kein Status');
+    doorOpen = [2, 3, 5, 6, 7].includes(st);
+    nukiLastCheck = Date.now();
+    return true;
+  } catch (e) {
+    console.log('Nuki-Status nicht abrufbar, nutze gespeicherten Zustand:', e.message);
+    return false;
+  }
+}
+
 async function openNukiDoor() {
+  setDoorStatus('Prüfe Türe...');
+  // Frisch abfragen, falls der letzte Check älter als 3 s ist
+  if (Date.now() - nukiLastCheck > 3000) await refreshDoorStateFromNuki();
+  setDoorStatus(doorOpen ? 'Schliesse Türe...' : 'Öffne Türe...');
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = img.onerror = async () => {
       if (doorOpen) {
-        document.getElementById('pin-status').textContent = '✓ Türe gesperrt';
+        setDoorStatus('✓ Türe gesperrt');
         doorOpen = false;
       } else {
-        document.getElementById('pin-status').textContent = '✓ Türe geöffnet';
+        setDoorStatus('✓ Türe geöffnet');
         doorOpen = true;
       }
       // Türstatus in JSONBin speichern
@@ -917,6 +1103,280 @@ async function saveDoorState() {
     });
   } catch(e) {
     console.log('Door state save error:', e);
+  }
+}
+
+// ════════════════════════════════════════════════
+// FINGERABDRUCK (Touch ID am iPad via WebAuthn)
+// Einrichten: Fingerabdruck-Taste -> PIN eingeben -> Taste nochmals antippen
+// Zurücksetzen: Fingerabdruck-Taste 3 s gedrückt halten
+// ════════════════════════════════════════════════
+const FINGER_STORE = 'ccs-touchid-cred';
+let fingerSupported = false, fingerSetupMode = false, fingerSetupReady = false, fingerBusy = false;
+
+function fingerCredId() { try { return localStorage.getItem(FINGER_STORE) || ''; } catch (e) { return ''; } }
+function b64urlEncode(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function b64urlDecode(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/'); while (str.length % 4) str += '=';
+  return Uint8Array.from(atob(str), c => c.charCodeAt(0));
+}
+function setFingerStatus(text, kind) {
+  const el = document.getElementById('pin-status');
+  el.textContent = text; el.className = 'pin-status' + (kind ? ' ' + kind : '');
+}
+function fingerUpdateKey() {
+  document.getElementById('finger-btn').classList.toggle('show', fingerSupported);
+  const k = document.getElementById('finger-key');
+  k.classList.toggle('hidden', !fingerSupported);
+  k.classList.toggle('setup', fingerSupported && !fingerCredId());
+  k.classList.remove('armed');
+}
+
+(async () => {
+  try {
+    fingerSupported = !!(window.PublicKeyCredential &&
+      await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+  } catch (e) { fingerSupported = false; }
+  fingerUpdateKey();
+})();
+
+let fingerSuppressClick = false;
+function fingerTap() {
+  if (fingerSuppressClick) { fingerSuppressClick = false; return; }
+  if (pinLocked || fingerBusy) return;
+  if (fingerSetupReady) { fingerRegister(); return; }
+  if (fingerCredId()) { fingerAuthenticate(); return; }
+  fingerSetupMode = true;
+  pinInput = ''; updatePinDots();
+  setFingerStatus('Zum Einrichten zuerst PIN eingeben');
+}
+
+function fingerCreateOptions() {
+  return { publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    rp: { name: 'Closed Circle Studios' },
+    user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'studio-tuere', displayName: 'Studio Türe' },
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+    attestation: 'none',
+    timeout: 60000,
+  }};
+}
+
+async function fingerRegister() {
+  fingerBusy = true;
+  try {
+    const cred = await navigator.credentials.create(fingerCreateOptions());
+    localStorage.setItem(FINGER_STORE, b64urlEncode(cred.rawId));
+    fingerSetupReady = false;
+    fingerUpdateKey();
+    setFingerStatus('✓ Fingerabdruck eingerichtet', 'success');
+    setTimeout(() => { if (!pinLocked) closePinOverlay(); }, 1800);
+  } catch (e) {
+    fingerSetupReady = false; fingerUpdateKey();
+    setFingerStatus(e.name === 'NotAllowedError' ? 'Einrichtung abgebrochen' : 'Einrichtung fehlgeschlagen (' + e.name + ')', 'error');
+  } finally { fingerBusy = false; }
+}
+
+async function fingerAuthenticate() {
+  const id = fingerCredId();
+  if (!id || fingerBusy) return;
+  fingerBusy = true;
+  // Wichtig: get() noch synchron im Tipp-Ereignis starten, Animation parallel
+  const req = navigator.credentials.get({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    allowCredentials: [{ type: 'public-key', id: b64urlDecode(id), transports: ['internal'] }],
+    userVerification: 'required',
+    timeout: 60000,
+  }});
+  scanStart();
+  try {
+    await req;
+    pinLocked = true;
+    await scanGranted();
+    await openNukiDoor();
+    scanSetText(doorOpen ? 'Türe offen' : 'Türe zu', 'Closed Circle Studios');
+    setTimeout(() => {
+      scanHide();
+      closePinOverlay();
+      pinLocked = false;
+    }, 2400);
+  } catch (e) {
+    if (e.name === 'NotAllowedError' || e.name === 'AbortError') {
+      scanHide(); // abgebrochen -> einfach zurück
+    } else {
+      await scanDenied();
+      setFingerStatus('Fingerabdruck nicht erkannt – PIN eingeben', 'error');
+    }
+  } finally {
+    fingerBusy = false;
+  }
+}
+
+// ── Scan-Animation ──
+function setDoorStatus(text) {
+  document.getElementById('pin-status').textContent = text;
+  if (document.getElementById('scan').classList.contains('on')) {
+    document.getElementById('scan-sub').textContent = text.replace('✓ ', '').toUpperCase();
+  }
+}
+
+(function buildFingerprint() {
+  // Fingerabdruck aus Bogen-Linien generieren (fester Seed -> immer gleich)
+  let seed = 7;
+  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const cx = 100, cy = 100, paths = [];
+  const arc = (rx, ry, a0, a1, ox) => {
+    let d = '';
+    for (let a = a0; a <= a1 + 0.001; a += 0.06) {
+      const x = cx + ox + rx * Math.cos(a), y = cy - ry * Math.sin(a) * (a > Math.PI || a < 0 ? 0.8 : 1);
+      d += (d ? ' L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+    }
+    return d;
+  };
+  for (let i = 0; i < 15; i++) {
+    const rx = 7 + i * 5.6, ry = 11 + i * 6.6, ox = Math.sin(i * 0.7) * 1.5;
+    const spread = 0.8 + Math.min(i, 10) * 0.04;
+    let a0 = -spread, a1 = Math.PI + spread;
+    // 1–2 Unterbrüche pro Linie, wie bei echten Papillarleisten
+    const breaks = i < 2 ? 0 : (rnd() < 0.5 ? 1 : 2);
+    const cuts = [];
+    for (let b = 0; b < breaks; b++) cuts.push(a0 + (a1 - a0) * (0.15 + rnd() * 0.7));
+    cuts.sort((x, y) => x - y);
+    let start = a0;
+    cuts.forEach((c) => { paths.push(arc(rx, ry, start, c - 0.07, ox)); start = c + 0.07; });
+    paths.push(arc(rx, ry, start, a1, ox));
+  }
+  // untere, flachere Linien
+  for (let j = 0; j < 5; j++) {
+    const y = 176 + j * 9, w = 78 - j * 8;
+    paths.push(`M${100 - w} ${y} Q100 ${y - 14 + j * 2} ${100 + w} ${y}`);
+  }
+  const svgNS = 'http://www.w3.org/2000/svg';
+  ['fp-base', 'fp-lit'].forEach((g) => {
+    const el = document.getElementById(g);
+    paths.forEach((d) => { const p = document.createElementNS(svgNS, 'path'); p.setAttribute('d', d); el.appendChild(p); });
+  });
+})();
+
+let scanRaf = null, scanT0 = 0, scanMode = 'idle';
+function scanSetText(title, sub) {
+  document.getElementById('scan-title').textContent = title;
+  document.getElementById('scan-sub').innerHTML = sub;
+}
+function scanLoop(t) {
+  const rig = document.querySelector('.scan-rig');
+  const h = rig.clientHeight;
+  const rect = document.getElementById('fp-clip-rect');
+  const beam = document.getElementById('scan-beam');
+  const el = (t - scanT0) / 1000;
+  if (scanMode === 'scanning') {
+    // Linie fährt hoch und runter, beleuchtete Fläche wächst mit
+    const phase = (Math.sin(el * 2.2 - Math.PI / 2) + 1) / 2; // 0..1
+    const y = phase * 240;
+    beam.style.transform = `translateY(${(phase * h).toFixed(1)}px)`;
+    const band = 34;
+    rect.setAttribute('y', Math.max(0, y - band));
+    rect.setAttribute('height', band * 2);
+    const pct = Math.min(99, Math.floor(el * 23));
+    document.getElementById('scan-sub').innerHTML = 'SCANNE <span class="scan-pct">' + String(pct).padStart(2, '0') + '%</span>';
+  }
+  scanRaf = requestAnimationFrame(scanLoop);
+}
+function scanStart() {
+  const sc = document.getElementById('scan');
+  sc.classList.remove('ok', 'fail');
+  scanSetText('Finger auflegen', 'SCANNE <span class="scan-pct">00%</span>');
+  scanMode = 'scanning';
+  scanT0 = performance.now();
+  document.querySelectorAll('#fp-lit path').forEach((p) => { p.style.transition = 'none'; p.style.strokeDasharray = ''; p.style.strokeDashoffset = ''; });
+  sc.classList.add('on');
+  cancelAnimationFrame(scanRaf); scanRaf = requestAnimationFrame(scanLoop);
+}
+function scanGranted() {
+  return new Promise((resolve) => {
+    scanMode = 'granted';
+    const sc = document.getElementById('scan');
+    const rect = document.getElementById('fp-clip-rect');
+    rect.setAttribute('y', -20); rect.setAttribute('height', 280);
+    // Linien von innen nach aussen "einbrennen"
+    const lit = [...document.querySelectorAll('#fp-lit path')];
+    lit.forEach((p, i) => {
+      const L = p.getTotalLength();
+      p.style.transition = 'none';
+      p.style.strokeDasharray = L; p.style.strokeDashoffset = L;
+      p.getBoundingClientRect();
+      p.style.transition = `stroke-dashoffset .7s cubic-bezier(.3,.8,.3,1) ${i * 0.025}s, stroke .4s`;
+      p.style.strokeDashoffset = 0;
+    });
+    sc.classList.add('ok');
+    scanSetText('Zugang', 'IDENTITÄT BESTÄTIGT');
+    setTimeout(resolve, 1100);
+  });
+}
+function scanDenied() {
+  return new Promise((resolve) => {
+    scanMode = 'denied';
+    const sc = document.getElementById('scan');
+    sc.classList.add('fail');
+    scanSetText('Kein Zugang', 'NICHT ERKANNT');
+    setTimeout(() => { scanHide(); resolve(); }, 1600);
+  });
+}
+function scanHide() {
+  scanMode = 'idle';
+  document.getElementById('scan').classList.remove('on');
+  setTimeout(() => {
+    if (scanMode !== 'idle') return;
+    cancelAnimationFrame(scanRaf);
+    document.getElementById('scan').classList.remove('ok', 'fail');
+  }, 400);
+}
+
+// Taste 3 s halten = Fingerabdruck zurücksetzen (nur nach PIN)
+(() => {
+  let t = null;
+  const k = document.getElementById('finger-key');
+  const start = () => { t = setTimeout(() => {
+    if (!fingerCredId()) return;
+    fingerSuppressClick = true;
+    fingerSetupMode = true; fingerResetPending = true;
+    pinInput = ''; updatePinDots();
+    setFingerStatus('PIN eingeben, um Fingerabdruck zu löschen');
+  }, 3000); };
+  const stop = () => clearTimeout(t);
+  k.addEventListener('touchstart', start, { passive: true }); k.addEventListener('mousedown', start);
+  k.addEventListener('touchend', stop); k.addEventListener('mouseup', stop); k.addEventListener('mouseleave', stop);
+})();
+let fingerResetPending = false;
+
+// Fingerabdruck-Button unten links: öffnen/schliessen ohne Code.
+// Noch nichts eingerichtet? -> Tippen richtet Touch ID direkt ein
+// (iOS verlangt dabei selbst einen gespeicherten Finger oder den iPad-Code).
+function fingerButtonTap() {
+  if (!fingerSupported || pinLocked || fingerBusy) return;
+  if (document.getElementById('pin-overlay').classList.contains('active')) return;
+  if (fingerCredId()) { fingerAuthenticate(); return; }
+  fingerRegisterWithScan();
+}
+
+async function fingerRegisterWithScan() {
+  fingerBusy = true;
+  const req = navigator.credentials.create(fingerCreateOptions()); // synchron im Tipp starten
+  scanStart();
+  scanSetText('Finger einrichten', 'TOUCH ID');
+  try {
+    const cred = await req;
+    localStorage.setItem(FINGER_STORE, b64urlEncode(cred.rawId));
+    fingerUpdateKey();
+    await scanGranted();
+    scanSetText('Eingerichtet', 'AB JETZT MIT FINGER ÖFFNEN');
+    setTimeout(scanHide, 1800);
+  } catch (e) {
+    if (e.name === 'NotAllowedError' || e.name === 'AbortError') scanHide();
+    else { await scanDenied(); }
+  } finally {
+    fingerBusy = false;
   }
 }
 
