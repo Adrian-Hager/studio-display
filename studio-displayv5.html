@@ -557,7 +557,7 @@
       <div class="pin-key" onclick="pinKey('7')">7</div>
       <div class="pin-key" onclick="pinKey('8')">8</div>
       <div class="pin-key" onclick="pinKey('9')">9</div>
-      <div class="pin-key finger hidden" id="finger-key" onclick="fingerTap()" aria-label="Fingerabdruck">
+      <div class="pin-key finger" id="finger-key" onclick="fingerTap()" aria-label="Fingerabdruck">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33"/></svg>
       </div>
       <div class="pin-key" onclick="pinKey('0')">0</div>
@@ -572,7 +572,7 @@
 <div class="studio-watermark">CLOSED CIRCLE STUDIOS</div>
 
 <!-- Fingerabdruck-Button -->
-<div id="finger-btn" role="button" aria-label="Mit Fingerabdruck öffnen" onclick="fingerButtonTap()">
+<div id="finger-btn" class="show" role="button" aria-label="Mit Fingerabdruck öffnen" onclick="fingerButtonTap()">
   <svg viewBox="0 0 24 24" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7.864 4.243A7.5 7.5 0 0 1 19.5 10.5c0 2.92-.556 5.709-1.568 8.268M5.742 6.364A7.465 7.465 0 0 0 4.5 10.5a7.464 7.464 0 0 1-1.15 3.993m1.989 3.559A11.209 11.209 0 0 0 8.25 10.5a3.75 3.75 0 1 1 7.5 0c0 .527-.021 1.049-.064 1.565M12 10.5a14.94 14.94 0 0 1-3.6 9.75m6.633-4.596a18.666 18.666 0 0 1-2.485 5.33"/></svg>
 </div>
 
@@ -739,12 +739,12 @@ window.addEventListener('online', () => camInitPeer());
 const camDebug = new URLSearchParams(location.search).has('camdebug');
 if (camDebug) {
   const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:9999;font:12px/1.5 Montserrat,sans-serif;color:#fff;background:rgba(255,255,255,.12);padding:10px 14px;border-radius:8px;cursor:auto';
+  box.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999;font:12px/1.5 Montserrat,sans-serif;color:#fff;background:rgba(255,255,255,.12);padding:10px 14px;border-radius:8px;cursor:auto';
   document.body.appendChild(box);
   setInterval(() => {
     const p = camState.peer;
     let st = !p ? 'kein Peer' : p.destroyed ? 'zerstört' : p.disconnected ? 'getrennt' : p.open ? 'BEREIT ✓' : 'verbinde …';
-    box.innerHTML = 'Kamera-Version 4<br>Peer: ' + st + ' (Slot ' + camState.slot + ')' + '<br>Viewer: ' + camState.viewers.size +
+    box.innerHTML = 'Build 7<br>Touch ID: ' + fingerDiag + '<br>Peer: ' + st + ' (Slot ' + camState.slot + ')' + '<br>Viewer: ' + camState.viewers.size +
       '<br>Kamera: ' + (camState.stream ? 'an' : 'aus') + (camState.lastError ? '<br>Fehler: ' + camState.lastError : '');
   }, 1000);
 }
@@ -1125,24 +1125,31 @@ function setFingerStatus(text, kind) {
   el.textContent = text; el.className = 'pin-status' + (kind ? ' ' + kind : '');
 }
 function fingerUpdateKey() {
-  document.getElementById('finger-btn').classList.toggle('show', fingerSupported);
+  document.getElementById('finger-btn').classList.add('show');
   const k = document.getElementById('finger-key');
-  k.classList.toggle('hidden', !fingerSupported);
+  k.classList.remove('hidden');
   k.classList.toggle('setup', fingerSupported && !fingerCredId());
   k.classList.remove('armed');
 }
 
+var fingerDiag = 'prüfe …';
 (async () => {
   try {
-    fingerSupported = !!(window.PublicKeyCredential &&
-      await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
-  } catch (e) { fingerSupported = false; }
+    if (!window.PublicKeyCredential) { fingerDiag = 'nein (Browser ohne WebAuthn)'; }
+    else if (!window.isSecureContext) { fingerDiag = 'nein (keine HTTPS-Seite)'; }
+    else {
+      fingerSupported = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      fingerDiag = fingerSupported ? 'ja' : 'nein (kein Touch ID / Face ID eingerichtet)';
+    }
+  } catch (e) { fingerSupported = false; fingerDiag = 'Fehler: ' + e.name; }
+  if (fingerSupported && fingerCredId()) fingerDiag += ', eingerichtet';
   fingerUpdateKey();
 })();
 
 let fingerSuppressClick = false;
 function fingerTap() {
   if (fingerSuppressClick) { fingerSuppressClick = false; return; }
+  if (!fingerSupported) { setFingerStatus('Touch ID: ' + fingerDiag, 'error'); return; }
   if (pinLocked || fingerBusy) return;
   if (fingerSetupReady) { fingerRegister(); return; }
   if (fingerCredId()) { fingerAuthenticate(); return; }
@@ -1353,8 +1360,15 @@ let fingerResetPending = false;
 // Fingerabdruck-Button unten links: öffnen/schliessen ohne Code.
 // Noch nichts eingerichtet? -> Tippen richtet Touch ID direkt ein
 // (iOS verlangt dabei selbst einen gespeicherten Finger oder den iPad-Code).
+function fingerUnavailable() {
+  scanStart();
+  scanDenied().then(() => {});
+  scanSetText('Touch ID aus', fingerDiag.replace(/^nein \(|\)$/g, '').toUpperCase());
+}
+
 function fingerButtonTap() {
-  if (!fingerSupported || pinLocked || fingerBusy) return;
+  if (!fingerSupported) { if (!fingerBusy) fingerUnavailable(); return; }
+  if (pinLocked || fingerBusy) return;
   if (document.getElementById('pin-overlay').classList.contains('active')) return;
   if (fingerCredId()) { fingerAuthenticate(); return; }
   fingerRegisterWithScan();
