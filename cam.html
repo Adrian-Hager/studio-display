@@ -22,8 +22,7 @@
 
   /* ── Bild ── */
   #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--black); }
-  #video { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .6s ease; }
-  #video.fit { object-fit: contain; }
+  #video { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .6s ease; }
   #video.on { opacity: 1; }
 
   /* Ruhezustand: grosser Schriftzug statt leerem Schwarz */
@@ -98,10 +97,25 @@
   #code:focus { border-bottom-color: var(--white); }
   #gate button { background: var(--white); color: var(--black); min-width: 240px; }
 
+  #app { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; }
+  /* Immer Querformat: im Hochformat wird die ganze Seite um 90° gedreht */
+  @media (orientation: portrait) {
+    html, body { width: 100vw; height: 100vh; }
+    #app {
+      top: 0; left: 100vw;
+      width: 100vh; height: 100vw;
+      transform: rotate(90deg); transform-origin: top left;
+      overflow: hidden;
+    }
+    #app #stage, #app #gate { position: absolute; }
+    #app #top, #app #bottom, #app #clock { position: absolute; }
+  }
+
   @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
+<div id="app">
 
 <div id="stage">
   <video id="video" autoplay muted playsinline></video>
@@ -119,7 +133,6 @@
 <div id="clock"></div>
 
 <div id="bottom">
-  <button id="fit" class="ghost" hidden aria-label="Bildausschnitt wechseln">⤢</button>
   <button id="main">Verbinden</button>
   <button id="lock" class="ghost" aria-label="Zugangscode ändern">Code</button>
 </div>
@@ -129,6 +142,8 @@
   <input id="code" type="password" inputmode="numeric" autocomplete="off" maxlength="12" aria-label="Zugangscode">
   <p id="gate-text">Zugangscode eingeben. Er wird auf diesem Gerät gespeichert.</p>
   <button id="gate-btn">Weiter</button>
+</div>
+
 </div>
 
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -176,7 +191,6 @@ function uiLive(on) {
   video.classList.toggle('on', on);
   $('idle').classList.toggle('hide', on);
   $('clock').classList.toggle('on', on);
-  $('fit').hidden = !on;
   clearInterval(clockTimer);
   if (on) { tickClock(); clockTimer = setInterval(tickClock, 1000); }
 }
@@ -239,6 +253,7 @@ function connect() {
       video.play().catch(() => {});
       uiLive(true);
       setStatus('live', 'Live');
+      watchFrames();
     });
     call.on('close', () => { if (active && gotStream) fail('Livebild beendet.'); });
   });
@@ -267,6 +282,27 @@ function connect() {
   }, 30000);
 }
 
+// Kommt kein Bild an (schwarz), iPad bitten, die Kamera neu zu starten
+let frameWatch = null;
+function watchFrames() {
+  clearInterval(frameWatch);
+  let lastTime = -1, stuck = 0, asked = 0;
+  frameWatch = setInterval(() => {
+    if (!active || !gotStream) { clearInterval(frameWatch); return; }
+    const t = video.currentTime;
+    const noFrames = video.videoWidth === 0 || t === lastTime;
+    lastTime = t;
+    stuck = noFrames ? stuck + 1 : 0;
+    if (stuck === 0) { setStatus('live', 'Live'); return; }
+    if (stuck >= 3) {
+      setStatus('wait', 'Kein Bild – starte Kamera neu …');
+      if (winner && winner.open && asked < 5) { try { winner.send({ type: 'refresh' }); } catch (e) {} asked++; }
+      stuck = 0;
+      video.play().catch(() => {});
+    }
+  }, 1500);
+}
+
 function fail(text) {
   disconnect(true);
   setStatus('err', 'Fehler');
@@ -274,7 +310,7 @@ function fail(text) {
 }
 
 function disconnect(silent) {
-  clearInterval(pingTimer); clearTimeout(timeoutTimer);
+  clearInterval(pingTimer); clearTimeout(timeoutTimer); clearInterval(frameWatch);
   conns.forEach(c => { try { if (c.open) c.send({ type: 'bye' }); } catch (e) {} try { c.close(); } catch (e) {} });
   if (peer) { try { peer.destroy(); } catch (e) {} }
   conns = []; winner = null; peer = null; gotStream = false;
@@ -285,7 +321,6 @@ function disconnect(silent) {
 
 $('main').addEventListener('click', () => active ? disconnect() : connect());
 $('lock').addEventListener('click', () => { disconnect(); setCode(''); showGate(); });
-$('fit').addEventListener('click', () => video.classList.toggle('fit'));
 $('gate-btn').addEventListener('click', submitGate);
 $('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGate(); });
 

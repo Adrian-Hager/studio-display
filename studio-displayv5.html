@@ -624,14 +624,48 @@ async function camSha256(text) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function camStartStream() {
-  if (camState.stream && camState.stream.getVideoTracks().some(t => t.readyState === 'live')) return camState.stream;
-  camState.stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: CAM_CONFIG.facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } },
-    audio: false,
-  });
-  document.getElementById('cam-video').srcObject = camState.stream;
-  return camState.stream;
+function camTrackOk() {
+  const t = camState.stream && camState.stream.getVideoTracks()[0];
+  return !!(t && t.readyState === 'live' && !t.muted && t.enabled);
+}
+
+// Kamera holen – oder neu holen, wenn iOS sie stumm/beendet hat (schwarzes Bild)
+async function camStartStream(force) {
+  if (!force && camTrackOk()) return camState.stream;
+  if (camState.starting) return camState.starting;
+  camState.starting = (async () => {
+    const old = camState.stream;
+    const fresh = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: CAM_CONFIG.facingMode, width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } },
+      audio: false,
+    });
+    const track = fresh.getVideoTracks()[0];
+    track.addEventListener('ended', () => camHeal('ended'));
+    track.addEventListener('mute', () => setTimeout(() => { if (track.muted) camHeal('mute'); }, 1500));
+    camState.stream = fresh;
+    const vid = document.getElementById('cam-video');
+    vid.srcObject = fresh; vid.play().catch(() => {});
+    // Laufende Übertragungen auf die neue Kamera umhängen (ohne neu zu verbinden)
+    camState.viewers.forEach((v) => {
+      try {
+        const pc = v.call && v.call.peerConnection;
+        if (pc) pc.getSenders().forEach((s) => { if (s.track === null || s.track.kind === 'video') s.replaceTrack(track); });
+      } catch (e) {}
+    });
+    if (old && old !== fresh) old.getTracks().forEach((t) => t.stop());
+    camState.lastError = '';
+    return fresh;
+  })();
+  try { return await camState.starting; } finally { camState.starting = null; }
+}
+
+let camHealTimer = null;
+function camHeal(reason) {
+  if (document.hidden) return; // im Hintergrund lässt iOS keine Kamera zu
+  clearTimeout(camHealTimer);
+  camHealTimer = setTimeout(() => {
+    camStartStream(true).catch((e) => { camState.lastError = 'Kamera (' + reason + '): ' + (e.name || e.message); });
+  }, 500);
 }
 
 function camUpdateLive() {
@@ -687,6 +721,7 @@ function camHandleConnection(conn) {
     if (!v) return;
     if (msg && msg.type === 'ping') v.lastPing = Date.now();
     if (msg && msg.type === 'bye') camDropViewer(conn.peer);
+    if (msg && msg.type === 'refresh') camHeal('viewer');
   });
   conn.on('close', () => camDropViewer(conn.peer));
   conn.on('error', () => camDropViewer(conn.peer));
@@ -744,8 +779,8 @@ if (camDebug) {
   setInterval(() => {
     const p = camState.peer;
     let st = !p ? 'kein Peer' : p.destroyed ? 'zerstört' : p.disconnected ? 'getrennt' : p.open ? 'BEREIT ✓' : 'verbinde …';
-    box.innerHTML = 'Build 7<br>Touch ID: ' + fingerDiag + '<br>Peer: ' + st + ' (Slot ' + camState.slot + ')' + '<br>Viewer: ' + camState.viewers.size +
-      '<br>Kamera: ' + (camState.stream ? 'an' : 'aus') + (camState.lastError ? '<br>Fehler: ' + camState.lastError : '');
+    box.innerHTML = 'Build 8<br>Touch ID: ' + fingerDiag + '<br>Peer: ' + st + ' (Slot ' + camState.slot + ')' + '<br>Viewer: ' + camState.viewers.size +
+      '<br>Kamera: ' + (camState.stream ? (camTrackOk() ? 'an ✓' : 'STUMM/BEENDET') : 'aus') + (camState.lastError ? '<br>Fehler: ' + camState.lastError : '');
   }, 1000);
 }
 
@@ -754,8 +789,11 @@ if (CAM_CONFIG.keepAlive) {
   camStartStream().catch(e => { camState.lastError = 'Kamera: ' + (e.name || e.message); });
   // Falls iOS die Kamera im Hintergrund abgestellt hat: beim Zurückkommen neu holen
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) camStartStream().catch(() => {});
+    if (!document.hidden) camHeal('visible');
   });
+  window.addEventListener('pageshow', () => camHeal('pageshow'));
+  // Sicherheitsnetz: alle 20 s prüfen, ob die Kamera wirklich liefert
+  setInterval(() => { if (!document.hidden && !camTrackOk()) camHeal('check'); }, 20000);
 }
 </script>
 
