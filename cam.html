@@ -21,8 +21,10 @@
   html, body { height: 100%; background: var(--black); color: var(--white); font-family: 'Montserrat', system-ui, sans-serif; overflow: hidden; }
 
   /* ── Bild ── */
-  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--black); }
-  #video { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .6s ease; }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--black); container-type: size; }
+  /* Festes Querformat 16:9 – egal wie das iPad-Bild ankommt, es wird quer zugeschnitten */
+  #frame { position: relative; aspect-ratio: 16 / 9; width: min(100cqw, calc(100cqh * 16 / 9)); overflow: hidden; }
+  #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .6s ease; }
   #video.on { opacity: 1; }
 
   /* Ruhezustand: grosser Schriftzug statt leerem Schwarz */
@@ -118,7 +120,7 @@
 <div id="app">
 
 <div id="stage">
-  <video id="video" autoplay muted playsinline></video>
+  <div id="frame"><video id="video" autoplay muted playsinline></video></div>
   <div id="idle">
     <h1>Wer ist<br>vorne?</h1>
     <p id="idle-text">Tippe auf Verbinden, um das Livebild vom iPad am Eingang zu sehen.</p>
